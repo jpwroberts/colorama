@@ -1,8 +1,10 @@
 # Copyright Jonathan Hartley 2013. BSD 3-Clause license, see LICENSE file.
+import platform
 
 # from winbase.h
 STDOUT = -11
 STDERR = -12
+ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 
 try:
     import ctypes
@@ -13,10 +15,18 @@ except (AttributeError, ImportError):
     windll = None
     SetConsoleTextAttribute = lambda *_: None
     winapi_test = lambda *_: None
+    vt_available = lambda *_: None
+    reset_enable_vt = lambda *_: None
 else:
     from ctypes import byref, Structure, c_char, POINTER
 
     COORD = wintypes._COORD
+
+    # Track whether we've enabled Win 10 virtual terminal,
+    # and what the original mode was set to.
+    we_enabled_windows_vt = False
+    old_mode_value = None
+
 
     class CONSOLE_SCREEN_BUFFER_INFO(Structure):
         """struct in wincon.h."""
@@ -62,6 +72,9 @@ else:
         COORD,
     ]
     _SetConsoleCursorPosition.restype = wintypes.BOOL
+
+    _GetConsoleMode = windll.kernel32.GetConsoleMode
+    _SetConsoleMode = windll.kernel32.SetConsoleMode
 
     _FillConsoleOutputCharacterA = windll.kernel32.FillConsoleOutputCharacterA
     _FillConsoleOutputCharacterA.argtypes = [
@@ -128,6 +141,22 @@ else:
         handle = _GetStdHandle(stream_id)
         return _SetConsoleCursorPosition(handle, adjusted_position)
 
+    def GetConsoleMode():
+        '''
+        Note: Returns None if STDOUT has been re-directed to a
+        file (and therefore has no Console mode).
+        '''
+        mode = wintypes.DWORD()
+        success = _GetConsoleMode(_GetStdHandle(STDOUT), byref(mode))
+        if success:
+            return mode.value
+        else:
+            return None
+
+
+    def SetConsoleMode(mode):
+        return _SetConsoleMode(_GetStdHandle(STDOUT), mode)
+
     def FillConsoleOutputCharacter(stream_id, char, length, start):
         handle = _GetStdHandle(stream_id)
         char = c_char(char.encode())
@@ -150,3 +179,52 @@ else:
 
     def SetConsoleTitle(title):
         return _SetConsoleTitleW(title)
+
+    def vt_available():
+        '''Ensure Windows 10 virtual terminal is enabled, if possible.
+
+        This function has side effects:
+            It will enable the virtual terminal if it's possible to do so.
+            global variables `old_mode_value` and `we_enabled_windows_vt` are modified.
+
+        Return: True if virtual terminal is enabled (which it may already have been),
+                False otherwise.
+        '''
+        global old_mode_value
+        global we_enabled_windows_vt
+
+        vt_enabled = False
+
+        if (platform.system().lower() == 'windows') and platform.release().startswith('10'):
+            ''' "Recent" Windows 10 versions supports ANSI sequences using virtual terminal mode.
+            However, this has been turned off by default in some Windows 10 versions (1511 to 1903 ?).
+            We turn virtual terminal support back on, if possible.
+            '''
+            old_mode = GetConsoleMode()
+            already_enabled = old_mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            if already_enabled:
+                return True
+
+            if old_mode is not None:  # and (not already_enabled):
+                if old_mode_value is None:
+                    # Don't set this again. We get called twice, for stdout and stderr.
+                    old_mode_value = old_mode
+
+                # Not all Windows 10 versions support virtual terminal.
+                if SetConsoleMode(old_mode_value | ENABLE_VIRTUAL_TERMINAL_PROCESSING):
+                    we_enabled_windows_vt = True
+
+            # Check if we managed to enable the virtual terminal
+            current_mode = GetConsoleMode()
+            if (current_mode is not None) and (current_mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING):
+                vt_enabled = True
+
+            return vt_enabled
+
+    def reset_enable_vt():
+        global we_enabled_windows_vt
+
+        if we_enabled_windows_vt:
+            # We enabled it, so turn it off again.
+            SetConsoleMode(old_mode_value)
+            we_enabled_windows_vt = False

@@ -13,11 +13,18 @@ class WinColor(object):
     YELLOW  = 6
     GREY    = 7
 
+
 # from wincon.h
 class WinStyle(object):
-    NORMAL              = 0x00 # dim text, dim background
-    BRIGHT              = 0x08 # bright text, dim background
-    BRIGHT_BACKGROUND   = 0x80 # dim text, bright background
+    NORMAL              = 0x00  # dim text, dim background
+    BRIGHT              = 0x08  # bright text, dim background
+    BRIGHT_BACKGROUND   = 0x80  # dim text, bright background
+
+    REVERSE             = 0x4000
+    REVERSE_OFF         = REVERSE
+    UNDERLINE           = 0x8000
+    UNDERLINE_OFF       = UNDERLINE
+
 
 class WinTerm(object):
 
@@ -167,3 +174,6 @@ class WinTerm(object):
 
     def set_title(self, title):
         win32.SetConsoleTitle(title)
+
+    def not_implemented(self, *args, **kwargs):
+        pass

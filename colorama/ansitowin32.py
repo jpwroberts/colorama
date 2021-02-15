@@ -5,7 +5,7 @@ import os
 
 from .ansi import AnsiFore, AnsiBack, AnsiStyle, Style, BEL
 from .winterm import WinTerm, WinColor, WinStyle
-from .win32 import windll, winapi_test
+from .win32 import windll, winapi_test, vt_available, reset_enable_vt
 
 
 winterm = None
@@ -83,9 +83,10 @@ class AnsiToWin32(object):
         on_windows = os.name == 'nt'
         # We test if the WinAPI works, because even if we are on Windows
         # we may be using a terminal that doesn't support the WinAPI
-        # (e.g. Cygwin Terminal). In this case it's up to the terminal
-        # to support the ANSI codes.
-        conversion_supported = on_windows and winapi_test()
+        # (e.g. Cygwin Terminal).
+        # Or we may be able to enable the Windows 10 virtual terminal mode.
+        # In those cases it's up to the terminal to support the ANSI codes.
+        conversion_supported = on_windows and winapi_test() and not vt_available()
 
         # should we strip ANSI sequences from our output?
         if strip is None:
@@ -120,6 +121,12 @@ class AnsiToWin32(object):
                 AnsiStyle.BRIGHT: (winterm.style, WinStyle.BRIGHT),
                 AnsiStyle.DIM: (winterm.style, WinStyle.NORMAL),
                 AnsiStyle.NORMAL: (winterm.style, WinStyle.NORMAL),
+
+                AnsiStyle.UNDERLINE: (winterm.not_implemented, WinStyle.UNDERLINE),
+                AnsiStyle.UNDERLINE_OFF: (winterm.not_implemented, WinStyle.UNDERLINE_OFF),
+                AnsiStyle.REVERSE: (winterm.not_implemented, WinStyle.REVERSE),
+                AnsiStyle.REVERSE_OFF: (winterm.not_implemented, WinStyle.REVERSE_OFF),
+
                 AnsiFore.BLACK: (winterm.fore, WinColor.BLACK),
                 AnsiFore.RED: (winterm.fore, WinColor.RED),
                 AnsiFore.GREEN: (winterm.fore, WinColor.GREEN),
@@ -172,6 +179,10 @@ class AnsiToWin32(object):
             self.call_win32('m', (0,))
         elif not self.strip and not self.stream.closed:
             self.wrapped.write(Style.RESET_ALL)
+
+        # If we enabled a previously disabled Windows virtual terminal,
+        # put it back how we found it.
+        reset_enable_vt()
 
 
     def write_and_convert(self, text):

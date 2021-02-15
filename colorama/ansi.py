@@ -91,10 +91,16 @@ class AnsiBack(AnsiCodes):
 
 
 class AnsiStyle(AnsiCodes):
-    BRIGHT    = 1
-    DIM       = 2
-    NORMAL    = 22
-    RESET_ALL = 0
+    BRIGHT     = 1
+    DIM        = 2
+    NORMAL     = 22
+    RESET_ALL  = 0
+
+    UNDERLINE     = 4
+    UNDERLINE_OFF = 24
+    REVERSE       = 7
+    REVERSE_OFF   = 27
+
 
 Fore   = AnsiFore()
 Back   = AnsiBack()
